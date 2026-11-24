@@ -1,0 +1,405 @@
+name: XLipis
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Criar o app XLipis
+        run: |
+          mkdir -p www
+          cat > www/icon.svg <<'XLIPIS_ICON'
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#ec4899"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#g)"/><path d="M150 150L362 362M362 150L150 362" stroke="#fff" stroke-width="64" stroke-linecap="round" fill="none"/><circle cx="392" cy="120" r="26" fill="#fde047"/></svg>
+          XLIPIS_ICON
+          cat > www/manifest.json <<'XLIPIS_MANIFEST'
+          {"name":"XLipis","short_name":"XLipis","start_url":"./index.html","display":"standalone","orientation":"any","background_color":"#0f0f17","theme_color":"#0f0f17","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}
+          XLIPIS_MANIFEST
+          cat > www/sw.js <<'XLIPIS_SW'
+          const C='xlipis-v1';
+          self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(['./','index.html','icon.svg','manifest.json'])));self.skipWaiting()});
+          self.addEventListener('activate',e=>e.waitUntil(clients.claim()));
+          self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request).then(r=>{const k=r.clone();caches.open(C).then(c=>c.put(e.request,k));return r}).catch(()=>caches.match(e.request)))});
+          XLIPIS_SW
+          cat > www/index.html <<'XLIPIS_HTML'
+          <!DOCTYPE html>
+          <html lang="pt-BR">
+          <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+          <meta name="theme-color" content="#0f0f17">
+          <link rel="manifest" href="manifest.json">
+          <link rel="icon" href="icon.svg">
+          <title>XLipis</title>
+          <style>
+          :root{--bg:#0f0f17;--p:#181826;--p2:#25253b;--t:#f1f1f8;--m:#9a9ab8;--a:#8b5cf6;--b:#ec4899}
+          *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+          html,body{margin:0;height:100%;background:var(--bg);color:var(--t);font:14px system-ui,Segoe UI,Roboto,sans-serif;overflow:hidden}
+          button{background:var(--p2);color:var(--t);border:0;border-radius:12px;padding:9px 12px;font:inherit;cursor:pointer}
+          button:active{transform:scale(.96)}
+          .on{background:linear-gradient(135deg,var(--a),var(--b))!important}
+          .grad{background:linear-gradient(135deg,var(--a),var(--b))}
+          [hidden]{display:none!important}
+          #splash{position:fixed;inset:0;z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:linear-gradient(135deg,#1b1233,#0f0f17);transition:opacity .5s}
+          #splash img{width:110px;border-radius:26px}
+          #splash h1{margin:0;font-size:38px;letter-spacing:2px}
+          #home{height:100%;overflow:auto;padding:calc(20px + env(safe-area-inset-top)) 16px 30px;max-width:900px;margin:auto}
+          .logo{display:flex;align-items:center;gap:12px}
+          .logo img{width:54px;height:54px;border-radius:14px}
+          .logo h1{margin:0;font-size:30px;background:linear-gradient(135deg,var(--a),var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+          .logo small{color:var(--m)}
+          .cta{display:flex;gap:10px;margin:18px 0;flex-wrap:wrap}
+          .cta button{flex:1;min-width:150px;padding:16px;font-size:15px;font-weight:600}
+          #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+          .card{background:var(--p);border-radius:14px;overflow:hidden}
+          .card img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#fff;cursor:pointer}
+          .card div{padding:8px 10px;display:flex;justify-content:space-between;align-items:center;gap:6px}
+          .card span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+          .card button{padding:4px 8px}
+          #editor{height:100%;height:100dvh;display:flex;flex-direction:column}
+          #top{display:flex;align-items:center;gap:6px;padding:calc(6px + env(safe-area-inset-top)) 8px 6px;background:var(--p)}
+          #top .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;padding:0 6px}
+          #stage{flex:1;position:relative;overflow:hidden;touch-action:none;background:#2a2a3a;cursor:crosshair}
+          #wrap{position:absolute;left:0;top:0;transform-origin:0 0;box-shadow:0 0 0 1px #0006,0 8px 40px #0008;background:repeating-conic-gradient(#fff 0 25%,#ddd 0 50%) 0 0/24px 24px}
+          #view{display:block}
+          #quick{display:flex;gap:12px;padding:6px 12px;background:var(--p);font-size:12px;color:var(--m)}
+          #quick label{flex:1;display:flex;align-items:center;gap:6px}
+          input[type=range]{flex:1;accent-color:var(--a);min-width:0}
+          #bar{display:flex;gap:4px;padding:6px 6px calc(6px + env(safe-area-inset-bottom));background:var(--p);overflow-x:auto}
+          #bar button{flex:0 0 auto;min-width:58px;display:flex;flex-direction:column;align-items:center;font-size:10px;gap:2px;padding:6px}
+          #bar button i{font-style:normal;font-size:20px;height:24px;display:flex;align-items:center}
+          #sw{display:inline-block;width:22px;height:22px;border-radius:50%;border:2px solid #fff}
+          #sheet{position:fixed;left:0;right:0;bottom:0;margin:auto;max-width:600px;max-height:65%;overflow:auto;background:var(--p);border-radius:20px 20px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px #000a;z-index:20}
+          #sheet h3{margin:0 0 10px;display:flex;justify-content:space-between;align-items:center}
+          .row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;align-items:center}
+          .row>button{flex:1 1 90px}
+          .sl{display:block;margin:10px 0;color:var(--m)}
+          .sl b{color:var(--t);float:right}
+          .sl input{width:100%}
+          .pal{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+          .pal i{aspect-ratio:1;border-radius:8px;border:1px solid #fff3;cursor:pointer}
+          .ly{display:flex;align-items:center;gap:6px;padding:6px;border-radius:10px;background:var(--p2);margin:4px 0}
+          .ly span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px;cursor:pointer}
+          .ly canvas{width:34px;height:34px;border-radius:6px;background:#fff}
+          #toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#000c;padding:8px 16px;border-radius:20px;z-index:50}
+          input[type=text]{width:100%;background:var(--p2);color:var(--t);border:0;border-radius:10px;padding:10px;font:inherit;-webkit-user-select:text;user-select:text}
+          </style>
+          </head>
+          <body>
+          <div id="splash"><img src="icon.svg" alt=""><h1>XLipis</h1></div>
+
+          <section id="home">
+            <div class="logo"><img src="icon.svg" alt=""><div><h1>XLipis</h1><small>Desenhe, pinte e crie</small></div></div>
+            <div class="cta"><button class="grad" id="bNew">✏️ Novo desenho</button><button class="grad" id="bPhoto">🖼️ Pintar uma foto</button></div>
+            <h3>Meus desenhos</h3>
+            <div id="grid"></div>
+            <p id="empty" style="color:var(--m)">Nada por aqui ainda. Crie seu primeiro desenho!</p>
+          </section>
+
+          <section id="editor" hidden>
+            <div id="top"><button id="bHome">←</button><div class="nm" id="nm">Sem título</div><button id="bUndo">↶</button><button id="bRedo">↷</button><button id="bSave">💾</button><button id="bExp">⬇️</button></div>
+            <div id="stage"><div id="wrap"><canvas id="view"></canvas></div></div>
+            <div id="quick"><label>Tam <input type="range" data-k="size" min="1" max="200"></label><label>Opac <input type="range" data-k="op" min="1" max="100"></label></div>
+            <nav id="bar">
+              <button data-tool="brush"><i>🖌️</i>Pincel</button>
+              <button data-tool="eraser"><i>🧽</i>Borracha</button>
+              <button data-tool="fill"><i>🪣</i>Balde</button>
+              <button data-tool="eye"><i>💧</i>Gota</button>
+              <button data-tool="line"><i>╱</i>Linha</button>
+              <button data-tool="rect"><i>▭</i>Retângulo</button>
+              <button data-tool="ell"><i>◯</i>Elipse</button>
+              <button data-sheet="brush"><i>🎛️</i>Ajustes</button>
+              <button data-sheet="color"><i><span id="sw"></span></i>Cor</button>
+              <button data-sheet="layers"><i>🗂️</i>Camadas</button>
+              <button data-a="photo"><i>🖼️</i>Foto</button>
+              <button data-sheet="more"><i>⋯</i>Mais</button>
+            </nav>
+          </section>
+
+          <div id="sheet" hidden></div>
+          <div id="toast" hidden></div>
+          <input type="file" id="file" accept="image/*" hidden>
+
+          <script>
+          const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+          const S={w:1080,h:1440,layers:[],cur:0,tool:'brush',brush:'pen',size:10,op:100,smooth:25,color:'#111111',rgb:[17,17,17],sym:false,fill:false,tol:32,id:null,name:'Sem título',dirty:0,recent:[]};
+          const view=$('#view'),vctx=view.getContext('2d'),wrap=$('#wrap'),stage=$('#stage'),sheet=$('#sheet');
+          let tx=0,ty=0,sc=1,stroking=false,last,sm,start,strokeC,sctx,rq=0,pan=null,gest=null,space=false,fileMode='project';
+          const ptrs=new Map(),hist=[],redo=[];
+          const PAL=['#000000','#444444','#888888','#cccccc','#ffffff','#7f1d1d','#dc2626','#f97316','#facc15','#a3e635','#16a34a','#065f46','#06b6d4','#2563eb','#1e3a8a','#7c3aed','#c026d3','#ec4899','#fda4af','#fed7aa','#92400e','#d6a77a','#fde0c5','#3f2a1d'];
+          const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+          const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+          const toast=m=>{const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,1600)};
+          const loadImg=src=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src});
+          const dirty=()=>{S.dirty=1};
+
+          /* ---------- cores ---------- */
+          const h2r=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
+          const r2h=r=>'#'+r.map(v=>Math.round(clamp(v,0,255)).toString(16).padStart(2,'0')).join('');
+          function hsl2rgb(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return[f(0)*255,f(8)*255,f(4)*255]}
+          function rgb2hsl(r,g,b){r/=255;g/=255;b/=255;const M=Math.max(r,g,b),m=Math.min(r,g,b),d=M-m;let h=0;const l=(M+m)/2,s=d?d/(1-Math.abs(2*l-1)):0;if(d){h=M==r?((g-b)/d)%6:M==g?(b-r)/d+2:(r-g)/d+4;h*=60;if(h<0)h+=360}return[h,s*100,l*100]}
+          function setColor(h){S.color=h;S.rgb=h2r(h);$('#sw').style.background=h}
+          function addRecent(){if(S.recent[0]!==S.color)S.recent=[S.color,...S.recent.filter(c=>c!==S.color)].slice(0,16)}
+          function saveSet(){try{localStorage.xl=JSON.stringify({size:S.size,op:S.op,smooth:S.smooth,color:S.color,brush:S.brush,recent:S.recent,tol:S.tol})}catch(e){}}
+          try{Object.assign(S,JSON.parse(localStorage.xl||'{}'))}catch(e){}
+          setColor(S.color);
+
+          /* ---------- banco (galeria) ---------- */
+          const DB=new Promise((res,rej)=>{const r=indexedDB.open('xlipis',1);r.onupgradeneeded=()=>r.result.createObjectStore('p',{keyPath:'id'});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+          const tx_=(m,f)=>DB.then(db=>new Promise((res,rej)=>{const t=db.transaction('p',m);const o=f(t.objectStore('p'));t.oncomplete=()=>res(o&&o.result);t.onerror=()=>rej(t.error)}));
+          function thumb(){const c=document.createElement('canvas'),k=Math.min(1,300/Math.max(S.w,S.h));c.width=S.w*k;c.height=S.h*k;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(view,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.7)}
+          async function save(quiet){render();if(!S.id)S.id=Date.now()+'';
+            const rec={id:S.id,name:S.name,w:S.w,h:S.h,t:Date.now(),th:thumb(),layers:S.layers.map(l=>({n:l.name,v:l.vis,o:l.op,d:l.c.toDataURL('image/png')}))};
+            try{await tx_('readwrite',s=>s.put(rec));S.dirty=0;if(!quiet)toast('Salvo ✔')}catch(e){toast('Erro ao salvar')}}
+          async function openProject(id){const r=await tx_('readonly',s=>s.get(id));if(!r)return;
+            S.id=r.id;S.name=r.name;S.w=r.w;S.h=r.h;S.layers=[];
+            for(const l of r.layers){const img=await loadImg(l.d),L=newLayer(l.n);L.c.getContext('2d').drawImage(img,0,0);L.vis=l.v;L.op=l.o;S.layers.push(L)}
+            S.cur=S.layers.length-1;init()}
+          async function home(){if(!$('#editor').hidden&&S.dirty)await save(true);
+            $('#editor').hidden=true;$('#home').hidden=false;sheet.hidden=true;
+            let list=[];try{list=(await tx_('readonly',s=>s.getAll()))||[]}catch(e){}
+            list.sort((a,b)=>b.t-a.t);
+            $('#grid').innerHTML=list.map(p=>`<div class="card"><img src="${p.th}" data-a="open" data-v="${p.id}"><div><span>${esc(p.name)}</span><button data-a="del" data-v="${p.id}">🗑</button></div></div>`).join('');
+            $('#empty').hidden=!!list.length}
+
+          /* ---------- projeto / camadas ---------- */
+          function newLayer(name,fill){const c=document.createElement('canvas');c.width=S.w;c.height=S.h;if(fill){const x=c.getContext('2d');x.fillStyle=fill;x.fillRect(0,0,S.w,S.h)}return{c,name,vis:true,op:1}}
+          function newProject(w,h,photo){S.w=w;S.h=h;S.id=null;S.name=photo?'Foto pintada':'Sem título';
+            S.layers=[newLayer('Fundo','#ffffff')];
+            if(photo){S.layers[0].c.getContext('2d').drawImage(photo,0,0,w,h);S.layers[0].name='Foto';S.layers.push(newLayer('Desenho'))}
+            else S.layers.push(newLayer('Camada 1'));
+            S.cur=S.layers.length-1;init()}
+          async function photoProject(f){const img=await loadImg(URL.createObjectURL(f)),k=Math.min(1,2000/Math.max(img.width,img.height));newProject(Math.round(img.width*k),Math.round(img.height*k),img)}
+          async function photoLayer(f){const img=await loadImg(URL.createObjectURL(f));if(S.layers.length>=12)return toast('Máx. 12 camadas');
+            const L=newLayer('Foto'),k=Math.min(S.w/img.width,S.h/img.height),w=img.width*k,h=img.height*k;
+            L.c.getContext('2d').drawImage(img,(S.w-w)/2,(S.h-h)/2,w,h);S.layers.splice(S.cur+1,0,L);S.cur++;hist.length=redo.length=0;dirty();draw();toast('Foto adicionada como camada')}
+          $('#file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{fileMode=='project'?await photoProject(f):await photoLayer(f)}catch(x){toast('Não consegui abrir a imagem')}};
+          function init(){view.width=S.w;view.height=S.h;view.style.width=S.w+'px';view.style.height=S.h+'px';wrap.style.width=S.w+'px';wrap.style.height=S.h+'px';
+            strokeC=document.createElement('canvas');strokeC.width=S.w;strokeC.height=S.h;sctx=strokeC.getContext('2d');
+            hist.length=redo.length=0;S.dirty=0;stroking=false;
+            $('#home').hidden=true;$('#editor').hidden=false;$('#nm').textContent=S.name;sheet.hidden=true;
+            syncUI();requestAnimationFrame(()=>{fit();render()})}
+
+          /* ---------- render / zoom ---------- */
+          function render(){if(!strokeC)return;vctx.clearRect(0,0,S.w,S.h);
+            S.layers.forEach((l,i)=>{if(!l.vis)return;vctx.globalAlpha=l.op;vctx.drawImage(l.c,0,0);
+              if(i==S.cur&&stroking&&S.tool!='eraser'){vctx.globalAlpha=l.op*S.op/100;vctx.drawImage(strokeC,0,0)}});
+            vctx.globalAlpha=1}
+          const draw=()=>{if(!rq)rq=requestAnimationFrame(()=>{rq=0;render()})};
+          const applyT=()=>{wrap.style.transform=`translate(${tx}px,${ty}px) scale(${sc})`};
+          function fit(){const w=stage.clientWidth,h=stage.clientHeight;sc=Math.min(w/S.w,h/S.h)*.96;tx=(w-S.w*sc)/2;ty=(h-S.h*sc)/2;applyT()}
+          addEventListener('resize',()=>{if(!$('#editor').hidden)fit()});
+          stage.addEventListener('wheel',e=>{e.preventDefault();const r=stage.getBoundingClientRect(),cx=e.clientX-r.left,cy=e.clientY-r.top,ns=clamp(sc*(e.deltaY<0?1.1:1/1.1),.05,16);tx=cx-(cx-tx)*ns/sc;ty=cy-(cy-ty)*ns/sc;sc=ns;applyT()},{passive:false});
+          stage.addEventListener('contextmenu',e=>e.preventDefault());
+
+          /* ---------- histórico ---------- */
+          function copy(c){const n=document.createElement('canvas');n.width=c.width;n.height=c.height;n.getContext('2d').drawImage(c,0,0);return n}
+          function pushHist(){hist.push({i:S.cur,img:copy(S.layers[S.cur].c)});if(hist.length>25)hist.shift();redo.length=0}
+          function restore(h){const L=S.layers[h.i];if(!L)return false;const x=L.c.getContext('2d');x.globalCompositeOperation='source-over';x.globalAlpha=1;x.clearRect(0,0,S.w,S.h);x.drawImage(h.img,0,0);return true}
+          function swap(from,to){const h=from.pop();if(!h)return;const L=S.layers[h.i];if(!L)return;to.push({i:h.i,img:copy(L.c)});restore(h);dirty();draw()}
+          const undo=()=>swap(hist,redo),redoF=()=>swap(redo,hist);
+          function cancelStroke(){if(!stroking)return;stroking=false;const h=hist.pop();if(h)restore(h);sctx.clearRect(0,0,S.w,S.h);draw()}
+
+          /* ---------- pincéis ---------- */
+          function stamp(ctx,x,y,p){
+            const er=S.tool=='eraser',b=er?'pen':S.brush,a=er?S.op/100:1,r=Math.max(.5,S.size/2*(b=='marker'?1:.25+.75*p)),[R,G,B]=S.rgb;
+            ctx.globalCompositeOperation=er?'destination-out':'source-over';ctx.fillStyle=`rgb(${R},${G},${B})`;
+            if(b=='air'||b=='water'){const k=b=='air'?1:1.25,g=ctx.createRadialGradient(x,y,0,x,y,r*k),al=(b=='air'?.14:.07)*a;
+              g.addColorStop(0,`rgba(${R},${G},${B},${al})`);g.addColorStop(1,`rgba(${R},${G},${B},0)`);ctx.globalAlpha=1;ctx.fillStyle=g;ctx.fillRect(x-r*k,y-r*k,r*k*2,r*k*2)}
+            else if(b=='pencil'){ctx.globalAlpha=.4*a;for(let i=0;i<5;i++){const g=Math.random()*6.283,d=Math.random()*r;ctx.beginPath();ctx.arc(x+Math.cos(g)*d,y+Math.sin(g)*d,Math.max(.5,r*.22),0,6.283);ctx.fill()}}
+            else if(b=='spray'){ctx.globalAlpha=a;for(let i=0;i<10;i++){const g=Math.random()*6.283,d=Math.sqrt(Math.random())*r;ctx.fillRect(x+Math.cos(g)*d,y+Math.sin(g)*d,1.5,1.5)}}
+            else if(b=='marker'){ctx.globalAlpha=a;ctx.save();ctx.translate(x,y);ctx.rotate(-.7);ctx.fillRect(-r,-r*.3,r*2,r*.6);ctx.restore()}
+            else{ctx.globalAlpha=a;ctx.beginPath();ctx.arc(x,y,r,0,6.283);ctx.fill()}
+            ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over'}
+          function dab(x,y,p){const ctx=S.tool=='eraser'?S.layers[S.cur].c.getContext('2d'):sctx;stamp(ctx,x,y,p);if(S.sym)stamp(ctx,S.w-x,y,p)}
+          function seg(q){const d=Math.hypot(q.x-last.x,q.y-last.y),sp=Math.max(1,S.size*(S.brush=='pen'||S.tool=='eraser'?.07:.14)),n=Math.max(1,Math.ceil(d/sp));
+            for(let i=1;i<=n;i++){const t=i/n;dab(last.x+(q.x-last.x)*t,last.y+(q.y-last.y)*t,last.p+(q.p-last.p)*t)}
+            last={x:q.x,y:q.y,p:q.p}}
+          function shape(p){sctx.clearRect(0,0,S.w,S.h);sctx.globalCompositeOperation='source-over';sctx.globalAlpha=1;sctx.strokeStyle=S.color;sctx.fillStyle=S.color;sctx.lineWidth=S.size;sctx.lineCap='round';sctx.lineJoin='round';sctx.beginPath();
+            const a=start;
+            if(S.tool=='line'){sctx.moveTo(a.x,a.y);sctx.lineTo(p.x,p.y)}
+            else if(S.tool=='rect')sctx.rect(a.x,a.y,p.x-a.x,p.y-a.y);
+            else sctx.ellipse((a.x+p.x)/2,(a.y+p.y)/2,Math.abs(p.x-a.x)/2,Math.abs(p.y-a.y)/2,0,0,6.283);
+            if(S.fill&&S.tool!='line')sctx.fill();sctx.stroke()}
+          function floodFill(c,sx,sy){const ctx=c.getContext('2d'),w=c.width,h=c.height;if(sx<0||sy<0||sx>=w||sy>=h)return;
+            const id=ctx.getImageData(0,0,w,h),d=id.data,o=(sy*w+sx)*4,tr=d[o],tg=d[o+1],tb=d[o+2],ta=d[o+3],[R,G,B]=S.rgb,tol=S.tol*4;
+            if(tr==R&&tg==G&&tb==B&&ta==255)return;
+            const match=i=>Math.abs(d[i]-tr)+Math.abs(d[i+1]-tg)+Math.abs(d[i+2]-tb)+Math.abs(d[i+3]-ta)<=tol,seen=new Uint8Array(w*h),st=[sx,sy];
+            while(st.length){const y=st.pop(),x=st.pop(),row=y*w;if(seen[row+x]||!match((row+x)*4))continue;
+              let l=x,r=x;while(l>0&&!seen[row+l-1]&&match((row+l-1)*4))l--;while(r<w-1&&!seen[row+r+1]&&match((row+r+1)*4))r++;
+              let up=false,dn=false;
+              for(let k=l;k<=r;k++){const j=row+k;seen[j]=1;d[j*4]=R;d[j*4+1]=G;d[j*4+2]=B;d[j*4+3]=255;
+                if(y>0){const m=!seen[j-w]&&match((j-w)*4);if(m&&!up)st.push(k,y-1);up=m}
+                if(y<h-1){const m=!seen[j+w]&&match((j+w)*4);if(m&&!dn)st.push(k,y+1);dn=m}}}
+            ctx.putImageData(id,0,0)}
+
+          /* ---------- ponteiro ---------- */
+          const pos=e=>{const r=view.getBoundingClientRect();return{x:(e.clientX-r.left)*S.w/r.width,y:(e.clientY-r.top)*S.h/r.height,p:e.pointerType=='pen'?(e.pressure||.5):1}};
+          function beginStroke(e){const L=S.layers[S.cur];if(!L)return;const p=pos(e);
+            if(S.tool=='eye'){const d=vctx.getImageData(clamp(p.x|0,0,S.w-1),clamp(p.y|0,0,S.h-1),1,1).data;setColor(r2h([d[0],d[1],d[2]]));S.tool='brush';syncUI();return}
+            if(!L.vis)return toast('Camada oculta');
+            pushHist();
+            if(S.tool=='fill'){floodFill(L.c,p.x|0,p.y|0);addRecent();dirty();draw();return}
+            stroking=true;start=p;last={...p};sm={...p};sctx.clearRect(0,0,S.w,S.h);
+            if(S.tool=='brush'||S.tool=='eraser'){dab(p.x,p.y,p.p);draw()}}
+          function moveStroke(e){const k=1-S.smooth/100*.92;
+            if(S.tool=='brush'||S.tool=='eraser'){const ev=e.getCoalescedEvents?e.getCoalescedEvents():[e];for(const v of (ev.length?ev:[e])){const p=pos(v);sm.x+=(p.x-sm.x)*k;sm.y+=(p.y-sm.y)*k;sm.p=p.p;seg(sm)}}
+            else shape(pos(e));
+            draw()}
+          function endStroke(){if(!stroking)return;stroking=false;
+            if(S.tool!='eraser'){const x=S.layers[S.cur].c.getContext('2d');x.globalAlpha=S.op/100;x.drawImage(strokeC,0,0);x.globalAlpha=1}
+            sctx.clearRect(0,0,S.w,S.h);addRecent();saveSet();dirty();draw()}
+          stage.addEventListener('pointerdown',e=>{e.preventDefault();stage.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+            if(ptrs.size==2){cancelStroke();const[a,b]=[...ptrs.values()];gest={d:Math.hypot(a.x-b.x,a.y-b.y)||1,cx:(a.x+b.x)/2,cy:(a.y+b.y)/2,sc,tx,ty};return}
+            if(ptrs.size>2)return;
+            if(e.button==1||e.button==2||space){pan={x:e.clientX,y:e.clientY,tx,ty};return}
+            beginStroke(e)});
+          stage.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+            if(gest&&ptrs.size>=2){const[a,b]=[...ptrs.values()],r=stage.getBoundingClientRect(),d=Math.hypot(a.x-b.x,a.y-b.y),cx=(a.x+b.x)/2,cy=(a.y+b.y)/2,ns=clamp(gest.sc*d/gest.d,.05,16),
+              px=(gest.cx-r.left-gest.tx)/gest.sc,py=(gest.cy-r.top-gest.ty)/gest.sc;sc=ns;tx=cx-r.left-px*ns;ty=cy-r.top-py*ns;applyT();return}
+            if(pan){tx=pan.tx+e.clientX-pan.x;ty=pan.ty+e.clientY-pan.y;applyT();return}
+            if(stroking)moveStroke(e)});
+          const up=e=>{if(!ptrs.delete(e.pointerId))return;if(ptrs.size<2)gest=null;if(!ptrs.size){pan=null;endStroke()}};
+          stage.addEventListener('pointerup',up);stage.addEventListener('pointercancel',up);
+
+          /* ---------- exportar ---------- */
+          async function exp(t){render();const mime=t=='jpg'?'image/jpeg':'image/png';let c=view;
+            if(t=='jpg'){c=document.createElement('canvas');c.width=S.w;c.height=S.h;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,S.w,S.h);x.drawImage(view,0,0)}
+            const nm=(S.name.replace(/[^\w\-]+/g,'_')||'desenho')+'.'+t,C=window.Capacitor,P=C&&C.Plugins;
+            try{if(C&&C.isNativePlatform&&C.isNativePlatform()&&P&&P.Filesystem&&P.Share){const r=await P.Filesystem.writeFile({path:nm,data:c.toDataURL(mime,.92).split(',')[1],directory:'CACHE'});await P.Share.share({title:S.name,url:r.uri});return}}catch(e){}
+            c.toBlob(async b=>{const f=new File([b],nm,{type:mime});
+              if(navigator.canShare&&navigator.canShare({files:[f]})&&/Android|iPhone|iPad/i.test(navigator.userAgent)){try{await navigator.share({files:[f]});return}catch(e){if(e.name=='AbortError')return}}
+              const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=nm;a.click();toast('Exportado ✔')},mime,.92)}
+
+          /* ---------- painéis ---------- */
+          const sl=(t,k,a,b)=>`<label class="sl">${t}<b id="v_${k}">${S[k]}</b><input type="range" data-k="${k}" min="${a}" max="${b}" value="${S[k]}"></label>`;
+          function openSheet(n){sheet.dataset.n=n;sheet.hidden=false;buildSheet()}
+          function buildSheet(){const n=sheet.dataset.n;let h='';const X='<button data-a="close">✕</button>';
+            if(n=='new'){const P=[['Retrato',1080,1440],['Quadrado',1080,1080],['Paisagem',1440,1080],['HD',1920,1080],['Pequeno',720,960],['Grande',2048,2048]];
+              h=`<h3>Novo desenho ${X}</h3><div class="row">${P.map(([t,w,hh])=>`<button data-a="mk" data-v="${w}x${hh}">${t}<br><small>${w}×${hh}</small></button>`).join('')}</div>`}
+            if(n=='brush'){h=`<h3>Pincel ${X}</h3><div class="row">${[['pen','Caneta'],['pencil','Lápis'],['marker','Marcador'],['air','Aerógrafo'],['water','Aquarela'],['spray','Spray']].map(([k,t])=>`<button data-a="brush" data-v="${k}" class="${S.brush==k?'on':''}">${t}</button>`).join('')}</div>`
+              +sl('Tamanho','size',1,200)+sl('Opacidade','op',1,100)+sl('Estabilizador','smooth',0,95)+sl('Tolerância do balde','tol',0,120)
+              +`<div class="row"><button data-a="sym" class="${S.sym?'on':''}">Simetria ${S.sym?'ON':'OFF'}</button><button data-a="fillshape" class="${S.fill?'on':''}">Formas preenchidas ${S.fill?'ON':'OFF'}</button></div>`}
+            if(n=='color'){const[hh,ss,ll]=rgb2hsl(...S.rgb).map(Math.round);
+              h=`<h3>Cor ${X}</h3><div class="row"><input type="color" id="cp" value="${S.color}" style="width:60px;height:44px;border:0;background:none;flex:none"><input type="text" id="hx" value="${S.color}" maxlength="7"></div>
+              <label class="sl">Matiz<input type="range" data-hsl="0" min="0" max="360" value="${hh}"></label>
+              <label class="sl">Saturação<input type="range" data-hsl="1" min="0" max="100" value="${ss}"></label>
+              <label class="sl">Brilho<input type="range" data-hsl="2" min="0" max="100" value="${ll}"></label>
+              <div class="pal">${PAL.map(c=>`<i data-a="col" data-v="${c}" style="background:${c}"></i>`).join('')}</div>
+              ${S.recent.length?`<p class="sl">Recentes</p><div class="pal">${S.recent.map(c=>`<i data-a="col" data-v="${c}" style="background:${c}"></i>`).join('')}</div>`:''}`}
+            if(n=='layers'){h=`<h3>Camadas ${X}</h3><div class="row"><button data-a="ladd">＋ Nova</button><button data-a="ldup">⧉ Duplicar</button><button data-a="ldel">🗑 Apagar</button><button data-a="lup">⬆</button><button data-a="ldn">⬇</button><button data-a="lmerge">⤓ Mesclar</button><button data-a="lren">✎ Nome</button></div>`;
+              h+=S.layers.map((l,i)=>`<div class="ly ${i==S.cur?'on':''}"><button data-a="lvis" data-v="${i}">${l.vis?'👁':'🚫'}</button><canvas width="68" height="68" data-t="${i}"></canvas><span data-a="lsel" data-v="${i}">${esc(l.name)}</span></div>`).reverse().join('');
+              h+=`<label class="sl">Opacidade da camada<input type="range" data-lop="1" min="0" max="100" value="${Math.round(S.layers[S.cur].op*100)}"></label>`}
+            if(n=='more'){h=`<h3>Mais ${X}</h3><input type="text" id="nmI" value="${esc(S.name)}"><p class="sl">Tela ${S.w}×${S.h}px</p><div class="row"><button data-a="fit">🔍 Ajustar zoom</button><button data-a="flip">↔ Espelhar camada</button><button data-a="clear">🧹 Limpar camada</button><button data-a="photo">🖼 Foto como camada</button><button data-a="png">⬇️ Exportar PNG</button><button data-a="jpg">⬇️ Exportar JPG</button></div><p class="sl">PC: B pincel · E borracha · G balde · I conta-gotas · L linha · R retângulo · O elipse · [ ] tamanho · Ctrl+Z / Ctrl+Y · Espaço+arrastar move · scroll dá zoom. Celular: dois dedos para zoom e mover.</p>`}
+            sheet.innerHTML=h;
+            $$('[data-t]').forEach(c=>{const L=S.layers[c.dataset.t],k=Math.min(68/S.w,68/S.h),w=S.w*k,hh=S.h*k;c.getContext('2d').drawImage(L.c,(68-w)/2,(68-hh)/2,w,hh)})}
+          sheet.oninput=e=>{const t=e.target;
+            if(t.dataset.k){S[t.dataset.k]=+t.value;syncUI()}
+            else if(t.dataset.hsl!==undefined){const v=$$('[data-hsl]').map(x=>+x.value);setColor(r2h(hsl2rgb(...v)));$('#cp').value=S.color;$('#hx').value=S.color;saveSet()}
+            else if(t.id=='cp'){setColor(t.value);$('#hx').value=t.value;saveSet()}
+            else if(t.id=='hx'){if(/^#[0-9a-f]{6}$/i.test(t.value)){setColor(t.value.toLowerCase());$('#cp').value=S.color;saveSet()}}
+            else if(t.dataset.lop){S.layers[S.cur].op=t.value/100;dirty();draw()}
+            else if(t.id=='nmI'){S.name=t.value||'Sem título';$('#nm').textContent=S.name;dirty()}};
+          $('#quick').oninput=e=>{const k=e.target.dataset.k;if(k){S[k]=+e.target.value;syncUI()}};
+          function syncUI(){$$('[data-k]').forEach(i=>{i.value=S[i.dataset.k];const b=$('#v_'+i.dataset.k);if(b)b.textContent=S[i.dataset.k]});
+            $$('[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool==S.tool));$('#sw').style.background=S.color;saveSet()}
+          const rs=()=>{hist.length=redo.length=0;dirty();draw();buildSheet()};
+          const A={
+            close(){sheet.hidden=true},
+            mk(v){const[w,h]=v.split('x').map(Number);sheet.hidden=true;newProject(w,h)},
+            open(id){openProject(id)},
+            del(id){if(confirm('Apagar este desenho?'))tx_('readwrite',s=>s.delete(id)).then(home)},
+            brush(v){S.brush=v;S.tool='brush';syncUI();buildSheet()},
+            sym(){S.sym=!S.sym;buildSheet()},
+            fillshape(){S.fill=!S.fill;buildSheet()},
+            col(v){setColor(v);saveSet();buildSheet()},
+            lsel(v){S.cur=+v;buildSheet()},
+            lvis(v){const L=S.layers[+v];L.vis=!L.vis;dirty();draw();buildSheet()},
+            ladd(){if(S.layers.length>=12)return toast('Máx. 12 camadas');S.layers.splice(S.cur+1,0,newLayer('Camada '+S.layers.length));S.cur++;rs()},
+            ldup(){if(S.layers.length>=12)return toast('Máx. 12 camadas');const o=S.layers[S.cur],L=newLayer(o.name+' cópia');L.c.getContext('2d').drawImage(o.c,0,0);L.op=o.op;S.layers.splice(S.cur+1,0,L);S.cur++;rs()},
+            ldel(){if(S.layers.length<2)return toast('Precisa ter 1 camada');S.layers.splice(S.cur,1);S.cur=Math.max(0,S.cur-1);rs()},
+            lup(){if(S.cur<S.layers.length-1){const[l]=S.layers.splice(S.cur,1);S.layers.splice(S.cur+1,0,l);S.cur++;rs()}},
+            ldn(){if(S.cur>0){const[l]=S.layers.splice(S.cur,1);S.layers.splice(S.cur-1,0,l);S.cur--;rs()}},
+            lmerge(){if(S.cur>0){const a=S.layers[S.cur],b=S.layers[S.cur-1],x=b.c.getContext('2d');x.globalAlpha=a.op;x.drawImage(a.c,0,0);x.globalAlpha=1;S.layers.splice(S.cur,1);S.cur--;rs()}},
+            lren(){const L=S.layers[S.cur],n=prompt('Nome da camada',L.name);if(n){L.name=n;buildSheet()}},
+            fit(){fit()},
+            flip(){pushHist();const L=S.layers[S.cur],c=copy(L.c),x=L.c.getContext('2d');x.clearRect(0,0,S.w,S.h);x.save();x.translate(S.w,0);x.scale(-1,1);x.drawImage(c,0,0);x.restore();dirty();draw()},
+            clear(){pushHist();S.layers[S.cur].c.getContext('2d').clearRect(0,0,S.w,S.h);dirty();draw()},
+            photo(){fileMode='layer';$('#file').click()},
+            png(){exp('png')},jpg(){exp('jpg')}
+          };
+          document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;const f=A[b.dataset.a];if(f)f(b.dataset.v)});
+          $$('[data-tool]').forEach(b=>b.onclick=()=>{S.tool=b.dataset.tool;syncUI()});
+          $$('[data-sheet]').forEach(b=>b.onclick=()=>openSheet(b.dataset.sheet));
+          $('#bNew').onclick=()=>openSheet('new');
+          $('#bPhoto').onclick=()=>{fileMode='project';$('#file').click()};
+          $('#bHome').onclick=home;$('#bUndo').onclick=undo;$('#bRedo').onclick=redoF;$('#bSave').onclick=()=>save();$('#bExp').onclick=()=>exp('png');
+          $('#nm').onclick=()=>{const n=prompt('Nome do desenho',S.name);if(n){S.name=n;$('#nm').textContent=n;dirty()}};
+
+          /* ---------- teclado / autosave ---------- */
+          addEventListener('keydown',e=>{if($('#editor').hidden)return;if(/INPUT|TEXTAREA/.test(e.target.tagName)&&e.target.type!='range')return;
+            const k=e.key.toLowerCase();
+            if(e.ctrlKey||e.metaKey){if(k=='z'){e.preventDefault();e.shiftKey?redoF():undo()}else if(k=='y'){e.preventDefault();redoF()}else if(k=='s'){e.preventDefault();save()}return}
+            if(k==' '){space=true;e.preventDefault();return}
+            const m={b:'brush',e:'eraser',g:'fill',i:'eye',l:'line',r:'rect',o:'ell'};
+            if(m[k]){S.tool=m[k];syncUI()}
+            if(k=='['){S.size=Math.max(1,S.size-(S.size>20?5:1));syncUI()}
+            if(k==']'){S.size=Math.min(200,S.size+(S.size>=20?5:1));syncUI()}});
+          addEventListener('keyup',e=>{if(e.key==' ')space=false});
+          setInterval(()=>{if(!$('#editor').hidden&&S.dirty&&!stroking)save(true)},30000);
+          document.addEventListener('visibilitychange',()=>{if(document.hidden&&!$('#editor').hidden&&S.dirty&&!stroking)save(true)});
+          const C0=window.Capacitor;
+          if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!(C0&&C0.isNativePlatform&&C0.isNativePlatform()))navigator.serviceWorker.register('sw.js').catch(()=>{});
+          home();
+          setTimeout(()=>{$('#splash').style.opacity=0;setTimeout(()=>$('#splash').remove(),500)},1100);
+          </script>
+          </body>
+          </html>
+          XLIPIS_HTML
+
+      - name: Preparar Capacitor, ícone e Android
+        run: |
+          npm init -y
+          npm i @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/filesystem@7 @capacitor/share@7
+          npx cap init XLipis com.xlipis.app --web-dir=www
+          npx cap add android
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-bin
+          R=android/app/src/main/res
+          rm -rf $R/mipmap-anydpi-v26
+          for p in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
+            set -- $p
+            for n in ic_launcher ic_launcher_round ic_launcher_foreground; do
+              rsvg-convert -w $2 -h $2 www/icon.svg -o $R/mipmap-$1/$n.png
+            done
+          done
+          npx cap sync android
+
+      - name: Gerar APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XLipis-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XLipis-Site-Web
+          path: www
